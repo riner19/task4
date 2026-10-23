@@ -1,0 +1,7 @@
+dash
+plotly
+pandas
+pyyaml
+pyarrow
+matplotlib
+gunicorn
