@@ -12,7 +12,7 @@ EUR_TO_USD = 1.2
 
 
 def parse_price(val):
-    """'$ 35' / '30.0USD' / 'USD 25.25' / '32.50 EUR' / '46$99c' / '36. $' -> float USD."""
+
     if pd.isna(val):
         return None
     s = str(val).upper()
