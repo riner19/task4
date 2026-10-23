@@ -1,17 +1,3 @@
-"""
-Itransition Task 4 - Part 1
-Load / clean / analyse the STORE* datasets and emit the six required figures.
-
-This is the original single-file pipeline with the fixes described in README.md:
-  * DD.MM.YYYY dates are normalised to ISO *before* pandas sees them, so dateutil
-    cannot silently read them month-first.
-  * timestamps are asserted to parse, instead of being coerced to NaT and dropped.
-  * year / month / day are extracted as real columns.
-  * daily revenue is plotted with matplotlib.
-  * ties in "most popular author" are reported rather than hidden by idxmax().
-
-Run:  python task4_pipeline.py            (writes charts/ and results.json)
-"""
 import os
 import re
 import json
@@ -24,7 +10,7 @@ import matplotlib.pyplot as plt
 STORES = ["STORE1", "STORE2", "STORE3", "STORE4", "STORE5"]
 EUR_TO_USD = 1.2
 
-# --------------------------------------------------------------------------- prices
+
 def parse_price(val):
     """'$ 35' / '30.0USD' / 'USD 25.25' / '32.50 EUR' / '46$99c' / '36. $' -> float USD."""
     if pd.isna(val):
@@ -35,22 +21,17 @@ def parse_price(val):
     if not nums:
         return None
     if len(nums) >= 2:
-        # the currency symbol is being used as the decimal separator: 46$99c, EUR22c25
         amount = nums[0] + nums[1] / 100.0
     elif "¢" in s or "CENT" in s:
         amount = nums[0] / 100.0
     else:
         amount = nums[0]
     if is_eur:
-        amount = round(amount * EUR_TO_USD, 2)   # settle on whole cents once, here
+        amount = round(amount * EUR_TO_USD, 2) 
     return amount
 
 
-# ----------------------------------------------------------------------- timestamps
-# In this data the dotted form is DAY first and the slashed form is MONTH first.
-# Verified across all 49,545 rows: field 1 of the dotted form reaches 31 while field 2
-# never exceeds 12; the slashed form is the exact reverse. dateutil assumes month-first
-# for both, so the dotted form has to be rewritten to ISO before pandas touches it.
+
 _DOTTED = re.compile(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)")
 
 
@@ -78,17 +59,14 @@ def parse_author_set(val):
     return tuple(sorted({a.strip() for a in str(val).split(",") if a.strip()}))
 
 
-# --------------------------------------------------------------------------- per store
 def process_store(store_name, data_root="data"):
     base_path = os.path.join(data_root, store_name)
 
-    # 1. Load -------------------------------------------------------------------
     with open(os.path.join(base_path, "books.yaml"), "r", encoding="utf-8") as f:
         books_df = pd.DataFrame(yaml.safe_load(f))
     orders_df = pd.read_parquet(os.path.join(base_path, "orders.parquet"))
     users_df = pd.read_csv(os.path.join(base_path, "users.csv"))
 
-    # 2. Books ------------------------------------------------------------------
     books_df.columns = books_df.columns.str.lstrip(":")
     books_df = books_df.drop_duplicates(subset=["id"])
     books_df["author_set"] = books_df["author"].apply(parse_author_set)
@@ -97,7 +75,6 @@ def process_store(store_name, data_root="data"):
     unique_author_sets_count = books_df.loc[
         books_df["author_set"].map(len) > 0, "author_set"].nunique()
 
-    # 3. Orders: timestamps -----------------------------------------------------
     orders_df = orders_df.drop_duplicates(subset=["id"])
     clean_ts = orders_df["timestamp"].map(normalise_timestamp)
     orders_df["parsed_ts"] = pd.to_datetime(clean_ts, format="mixed", dayfirst=False,
@@ -110,7 +87,6 @@ def process_store(store_name, data_root="data"):
     orders_df["month"] = orders_df["parsed_ts"].dt.month
     orders_df["day"] = orders_df["parsed_ts"].dt.day
 
-    # 4. Orders: money ----------------------------------------------------------
     orders_df["unit_price_usd"] = orders_df["unit_price"].apply(parse_price)
     bad_price = int(orders_df["unit_price_usd"].isna().sum())
     assert bad_price == 0, f"{store_name}: {bad_price} prices failed to parse"
@@ -120,9 +96,6 @@ def process_store(store_name, data_root="data"):
     daily_revenue = orders_df.groupby("date")["paid_price"].sum().sort_index().round(2)
     top_5_days = daily_revenue.sort_values(ascending=False).head(5)
 
-    # 5. User reconciliation ----------------------------------------------------
-    # Same person == agrees on >= 3 of (name, address, phone, email), i.e. at most one
-    # field changed. Blocking on each 3-field subset gives that in linear time.
     users_df = users_df.drop_duplicates(subset=["id"])
     parent = {}
 
@@ -153,7 +126,6 @@ def process_store(store_name, data_root="data"):
     user_to_root = {uid: find(uid) for uid in parent}
     unique_users_count = len(set(user_to_root.values()))
 
-    # 6. Best buyer -------------------------------------------------------------
     orders_df["real_user_id"] = orders_df["user_id"].map(user_to_root)
     by_person = orders_df.groupby("real_user_id")["paid_price"].sum()
     top_root = by_person.idxmax()
@@ -162,7 +134,6 @@ def process_store(store_name, data_root="data"):
     best_buyer_names = sorted(
         {str(n) for n in users_df.loc[users_df["id"].isin(best_buyer_ids), "name"]})
 
-    # 7. Most popular author set (ties reported) --------------------------------
     book_to_authors = dict(zip(books_df["id"], books_df["author_set"]))
     orders_df["author_set"] = orders_df["book_id"].map(book_to_authors)
     sold = orders_df.groupby("author_set")["quantity"].sum()
