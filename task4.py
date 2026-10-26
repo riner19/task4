@@ -10,9 +10,8 @@ import matplotlib.pyplot as plt
 STORES = ["STORE1", "STORE2", "STORE3", "STORE4", "STORE5"]
 EUR_TO_USD = 1.2
 
-
 def parse_price(val):
-
+    """'$ 35' / '30.0USD' / 'USD 25.25' / '32.50 EUR' / '46$99c' / '36. $' -> float USD."""
     if pd.isna(val):
         return None
     s = str(val).upper()
@@ -27,9 +26,8 @@ def parse_price(val):
     else:
         amount = nums[0]
     if is_eur:
-        amount = round(amount * EUR_TO_USD, 2) 
+        amount = round(amount * EUR_TO_USD, 2)
     return amount
-
 
 
 _DOTTED = re.compile(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.(\d{4})(?!\d)")
@@ -143,6 +141,9 @@ def process_store(store_name, data_root="data"):
 
     return {
         "store": store_name,
+        "books_df": books_df,
+        "users_df": users_df,
+        "user_to_root": user_to_root,
         "orders": int(len(orders_df)),
         "total_revenue": round(float(orders_df["paid_price"].sum()), 2),
         "top_5_days": top_5_days,
